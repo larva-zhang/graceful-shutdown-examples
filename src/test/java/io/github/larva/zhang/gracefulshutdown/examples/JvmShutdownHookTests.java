@@ -4,10 +4,13 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import junit.framework.TestCase;
 import org.junit.Assert;
@@ -70,49 +73,55 @@ public class JvmShutdownHookTests extends TestCase {
             // hookA
             try {
                 // 等待模拟数据库连接池先关闭
-                Thread.sleep(500);
+                Thread.sleep(3000);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                System.out.println("HookA等待时发生InterruptedException");
             }
             mockBusinessThreadPool.shutdown();
             System.out.println("ShutdownHook A invoke terminate mock business thread pool");
         }));
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            mockDatabaseConnectionPool.shutdownNow();
+            mockDatabaseConnectionPool.shutdown();
             try {
                 boolean terminatedBeforeTimeout = mockDatabaseConnectionPool.awaitTermination(1, TimeUnit.SECONDS);
                 if (terminatedBeforeTimeout) {
                     // 超时前所有任务已结束
-                    System.out.println("模拟数据库连接池已关闭");
+                    System.out.println("模拟的数据库连接池在超时前已关闭");
                 } else {
                     // 发生超时，但因为是异步执行，不能确定线程池一定还有任务未结束
                     if (mockDatabaseConnectionPool.isTerminated()) {
-                        System.out.println("模拟数据库连接池在等待超时后仍然已关闭");
+                        System.out.println("模拟的数据库连接池在等待超时后仍然已关闭");
                     } else {
-                        System.out.println("模拟数据库连接池在等待超时后仍然未关闭");
+                        System.out.println("模拟的数据库连接池在等待超时后仍然未关闭");
                     }
                 }
             } catch (InterruptedException e) {
-                throw new RuntimeException(e);
+                System.out.println("模拟的数据库连接池在等待关闭过程中发生了InterruptedException");
             }
             System.out.println("ShutdownHook B invoke terminate mock db connection pool");
         }));
         mockBusinessThreadPool.submit(()->{
             while (true) {
                 // 模拟业务线程调用数据库查询
-                Future<Boolean> future = mockDatabaseConnectionPool.submit(
-                    () -> {
-                        try {
-                            // 模拟执行数据库查询
-                            Thread.sleep(500);
-                            return Boolean.TRUE;
-                        } catch (InterruptedException e) {
-                            System.out.println("模拟数据库连接池捕获InterruptedException");
-                            Thread.currentThread().interrupt();
-                            return Boolean.FALSE;
-                        }
-                    });
-                Boolean mockDbExecuteResult = future.get(1100, TimeUnit.MILLISECONDS);
+                Boolean mockDbExecuteResult = null;
+                try {
+                    Future<Boolean> future = mockDatabaseConnectionPool.submit(
+                        () -> {
+                            try {
+                                // 模拟执行数据库查询
+                                Thread.sleep(100);
+                                return Boolean.TRUE;
+                            } catch (InterruptedException e) {
+                                System.out.println("模拟的数据库连接池捕获InterruptedException");
+                                Thread.currentThread().interrupt();
+                                return Boolean.FALSE;
+                            }
+                        });
+                    mockDbExecuteResult = future.get(300, TimeUnit.MILLISECONDS);
+                } catch (Exception e) {
+                    System.out.println("模拟数据库查询发生异常："+e.getMessage());
+                }
                 Assert.assertEquals(Boolean.TRUE, mockDbExecuteResult);
             }
         });
