@@ -1,16 +1,12 @@
 package io.github.larva.zhang.gracefulshutdown.examples;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import junit.framework.TestCase;
 import org.junit.Assert;
@@ -18,7 +14,7 @@ import org.junit.Assert;
 /**
  * JvmShutdownHookTests
  *
- * @author zhanghan
+ * @author larva-zhang
  * @date 2022/6/30
  * @since 1.0
  */
@@ -51,9 +47,8 @@ public class JvmShutdownHookTests extends TestCase {
 
     @SuppressWarnings({"MismatchedQueryAndUpdateOfCollection", "InfiniteLoopStatement"})
     public void testJvmShutdownHookInvokeAfterOOM() {
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            System.out.println("ShutdownHook invoke after OOM");
-        }));
+        Runtime.getRuntime()
+            .addShutdownHook(new Thread(() -> System.out.println("ShutdownHook invoke after OOM")));
         throw Assert.assertThrows(OutOfMemoryError.class, () -> {
             // generate OOM
             List<ByteBuffer> byteBufferList = new ArrayList<>();
